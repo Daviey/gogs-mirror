@@ -24,6 +24,8 @@ var (
 	excludeFilter []*regexp.Regexp
 	includeFilter []*regexp.Regexp
 
+	workaround1862 bool
+
 	gogsURL     string
 	gogsToken   string
 	gogsUser    string
@@ -42,6 +44,8 @@ func init() {
 		fmt.Fprintln(os.Stderr, "    \tPatterns prefixed with a dash (-) must not be matched.")
 		flag.PrintDefaults()
 	}
+
+	flag.BoolVar(&workaround1862, "workaround-1862", false, `Swap the "private" and "mirror" Gogs API fields (workaround for https://github.com/gogits/gogs/pull/1862)`)
 
 	flag.BoolVar(&dryRun, "dry-run", false, "Only print information about the migrations that would be performed.")
 	flag.BoolVar(&mirror, "mirror", true, "Create the Gogs repositories as mirrors")
@@ -189,6 +193,9 @@ func main() {
 		}
 
 		opts.AuthPassword = githubToken
+		if workaround1862 {
+			opts.Mirror, opts.Private = opts.Private, opts.Mirror
+		}
 
 		wg.Add(1)
 		i := i

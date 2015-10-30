@@ -28,3 +28,5 @@
           Create the Gogs repositories as mirrors (default true)
       -repo-type string
           all | owner | public | private | member (default "owner")
+      -workaround-1862
+          Swap the "private" and "mirror" Gogs API fields (workaround for https://github.com/gogits/gogs/pull/1862)
