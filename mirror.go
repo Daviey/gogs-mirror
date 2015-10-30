@@ -213,4 +213,5 @@ func main() {
 		}()
 	}
 	wg.Wait()
+	bar.Update()
 }
