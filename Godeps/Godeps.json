@@ -1,0 +1,34 @@
+{
+	"ImportPath": "code.nathan7.eu/nathan7/gogs-mirror",
+	"GoVersion": "go1.5.1",
+	"Deps": [
+		{
+			"ImportPath": "github.com/cheggaaa/pb",
+			"Rev": "da1f27ad1d9509b16f65f52fd9d8138b0f2dc7b2"
+		},
+		{
+			"ImportPath": "github.com/davecgh/go-spew/spew",
+			"Rev": "fc32781af5e85e548d3f1abaf0fa3dbe8a72495c"
+		},
+		{
+			"ImportPath": "github.com/gogits/go-gogs-client",
+			"Rev": "1030bf8f1320bc236b0efe53f62de34d20814ba1"
+		},
+		{
+			"ImportPath": "github.com/google/go-github/github",
+			"Rev": "0aaa85be4f3087c6dd815a69e291775d4e83f9ea"
+		},
+		{
+			"ImportPath": "github.com/google/go-querystring/query",
+			"Rev": "547ef5ac979778feb2f760cdb5f4eae1a2207b86"
+		},
+		{
+			"ImportPath": "golang.org/x/net/context",
+			"Rev": "21c3935a8fc0f954d03e6b8a560c9600ffee38d2"
+		},
+		{
+			"ImportPath": "golang.org/x/oauth2",
+			"Rev": "397fe7649477ff2e8ced8fc0b2696f781e53745a"
+		}
+	]
+}
