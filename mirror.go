@@ -213,5 +213,7 @@ func main() {
 		}()
 	}
 	wg.Wait()
-	bar.Update()
+	if bar != nil {
+		bar.Update()
+	}
 }
