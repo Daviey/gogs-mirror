@@ -31,9 +31,6 @@ var (
 	gogsUser    string
 	githubToken string
 	githubUser  string
-
-	gogsUserID      int
-	githubTokenUser string
 )
 
 func init() {
@@ -103,7 +100,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("couldn't fetch GitHub user: %s", err)
 	}
-	githubTokenUser = *githubTokenUserData.Login
+	githubTokenUser := *githubTokenUserData.Login
 
 	githubUserData, _, err := github.Users.Get(githubUser)
 	if err != nil {
@@ -175,7 +172,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("couldn't fetch Gogs user: %s", err)
 	}
-	gogsUserID = int(gogsUserData.ID)
+	gogsUserID := int(gogsUserData.ID)
 
 	log.Printf("preparing to copy %d repos", len(repos))
 	var (
