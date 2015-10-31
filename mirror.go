@@ -99,24 +99,42 @@ func main() {
 	}
 	github = githubapi.NewClient(githubHttp)
 
-	githubUserData, _, err := github.Users.Get("")
+	githubTokenUserData, _, err := github.Users.Get("")
 	if err != nil {
 		log.Fatalf("couldn't fetch GitHub user: %s", err)
 	}
-	githubTokenUser = *githubUserData.Login
+	githubTokenUser = *githubTokenUserData.Login
 
-	opts := &githubapi.RepositoryListOptions{
-		Type: repoType,
-		ListOptions: githubapi.ListOptions{
-			Page:    0,
-			PerPage: 100,
-		},
+	githubUserData, _, err := github.Users.Get(githubUser)
+	if err != nil {
+		log.Fatalf("couldn't fetch GitHub user: %s", err)
+	}
+	githubUserIsOrg := githubUserData.Type != nil && *githubUserData.Type == "Organization"
+
+	listOpts := githubapi.ListOptions{
+		Page:    0,
+		PerPage: 100,
 	}
 
 	var repos []githubapi.Repository
 
 	for {
-		pageRepos, resp, err := github.Repositories.List(githubUser, opts)
+		var (
+			pageRepos []githubapi.Repository
+			resp      *githubapi.Response
+			err       error
+		)
+		if githubUserIsOrg {
+			pageRepos, resp, err = github.Repositories.ListByOrg(githubUser, &githubapi.RepositoryListByOrgOptions{
+				Type:        repoType,
+				ListOptions: listOpts,
+			})
+		} else {
+			pageRepos, resp, err = github.Repositories.List(githubUser, &githubapi.RepositoryListOptions{
+				Type:        repoType,
+				ListOptions: listOpts,
+			})
+		}
 		if err != nil {
 			log.Fatalf("couldn't fetch GitHub repository list: %s", err)
 		}
@@ -147,7 +165,7 @@ func main() {
 			repos = append(repos, repo)
 		}
 
-		opts.Page = resp.NextPage
+		listOpts.Page = resp.NextPage
 		if resp.NextPage == 0 {
 			break
 		}
