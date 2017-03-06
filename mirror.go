@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -29,6 +30,7 @@ var (
 	gogsURL     string
 	gogsToken   string
 	gogsUser    string
+	gogsOrg     string
 	githubToken string
 	githubUser  string
 )
@@ -52,13 +54,15 @@ func init() {
 	flag.StringVar(&gogsURL, "gogs-url", "", "URL of the target Gogs instance")
 	flag.StringVar(&gogsToken, "gogs-token", "", "Gogs API token")
 	flag.StringVar(&gogsUser, "gogs-user", "", "Gogs target user")
+	flag.StringVar(&gogsOrg, "gogs-organization", "", "(Optional) Target organization to push to, if not set push to user account")
 	flag.StringVar(&githubToken, "github-token", "", "GitHub API token")
 	flag.StringVar(&githubUser, "github-user", "", "GitHub source user")
 }
 
 var (
-	gogs   *gogsapi.Client
-	github *githubapi.Client
+	gogs             *gogsapi.Client
+	gogsOrganization *gogsapi.Organization
+	github           *githubapi.Client
 )
 
 func main() {
@@ -95,14 +99,15 @@ func main() {
 			oauth2.StaticTokenSource(&oauth2.Token{AccessToken: githubToken}))
 	}
 	github = githubapi.NewClient(githubHttp)
+	ctx := context.Background()
 
-	githubTokenUserData, _, err := github.Users.Get("")
+	githubTokenUserData, _, err := github.Users.Get(ctx, "")
 	if err != nil {
 		log.Fatalf("couldn't fetch GitHub user: %s", err)
 	}
 	githubTokenUser := *githubTokenUserData.Login
 
-	githubUserData, _, err := github.Users.Get(githubUser)
+	githubUserData, _, err := github.Users.Get(ctx, githubUser)
 	if err != nil {
 		log.Fatalf("couldn't fetch GitHub user: %s", err)
 	}
@@ -117,17 +122,17 @@ func main() {
 
 	for {
 		var (
-			pageRepos []githubapi.Repository
+			pageRepos []*githubapi.Repository
 			resp      *githubapi.Response
 			err       error
 		)
 		if githubUserIsOrg {
-			pageRepos, resp, err = github.Repositories.ListByOrg(githubUser, &githubapi.RepositoryListByOrgOptions{
+			pageRepos, resp, err = github.Repositories.ListByOrg(ctx, githubUser, &githubapi.RepositoryListByOrgOptions{
 				Type:        repoType,
 				ListOptions: listOpts,
 			})
 		} else {
-			pageRepos, resp, err = github.Repositories.List(githubUser, &githubapi.RepositoryListOptions{
+			pageRepos, resp, err = github.Repositories.List(ctx, githubUser, &githubapi.RepositoryListOptions{
 				Type:        repoType,
 				ListOptions: listOpts,
 			})
@@ -159,7 +164,7 @@ func main() {
 			}
 
 			fmt.Println(*repo.FullName)
-			repos = append(repos, repo)
+			repos = append(repos, *repo)
 		}
 
 		listOpts.Page = resp.NextPage
@@ -168,11 +173,25 @@ func main() {
 		}
 	}
 
-	gogsUserData, err := gogs.GetUserInfo(gogsUser)
-	if err != nil {
-		log.Fatalf("couldn't fetch Gogs user: %s", err)
+	var gogsOwnerID int
+	var gogsOwnerName string
+	if gogsOrg == "" {
+		gogsUserData, err := gogs.GetUserInfo(gogsUser)
+		if err != nil {
+			log.Fatalf("couldn't fetch Gogs user: %s", err)
+		}
+		gogsOwnerID = int(gogsUserData.ID)
+		gogsOwnerName = gogsUser
+
+	} else {
+		gogsOrganization, err := gogs.GetOrg(gogsOrg)
+		if err != nil {
+			log.Fatalf("couldn't fetch Gogs Organization: %s", err)
+		}
+		gogsOwnerID = int(gogsOrganization.ID)
+		gogsOwnerName = gogsOrg
+
 	}
-	gogsUserID := int(gogsUserData.ID)
 
 	log.Printf("preparing to copy %d repos", len(repos))
 	var (
@@ -184,11 +203,19 @@ func main() {
 		bar = pb.StartNew(len(repos))
 	}
 
+	concurrency := 10
+	sem := make(chan bool, concurrency)
 	gogsRepos := make([]*gogsapi.Repository, len(repos))
 	for i, repo := range repos {
+
 		var repoDescription string
 		if repo.Description != nil {
 			repoDescription = *repo.Description
+
+			if len(repoDescription) > 255 {
+				repoDescription = repoDescription[:255]
+			}
+
 		}
 
 		opts := gogsapi.MigrateRepoOption{
@@ -196,7 +223,7 @@ func main() {
 			AuthUsername: githubTokenUser,
 
 			Private:     *repo.Private,
-			UID:         gogsUserID,
+			UID:         gogsOwnerID,
 			RepoName:    *repo.Name,
 			Description: repoDescription,
 			Mirror:      mirror,
@@ -213,20 +240,35 @@ func main() {
 		}
 
 		wg.Add(1)
+		sem <- true
 		i := i
-		go func() {
+		go func(reponame string, reposhortname string, v int) {
+			defer func() { <-sem }()
 			defer wg.Done()
 			defer bar.Increment()
 
-			gogsRepo, err := gogs.MigrateRepo(opts)
-			if err != nil {
-				log.Printf("failed to migrate repo %s: %s", *repo.FullName, err)
+			_, err := gogs.GetRepo(gogsOwnerName, reposhortname)
+
+			// check to see if repo already there
+			if err == nil {
+				log.Printf("skipping already present repo: %s -> %s/%s:", reponame, gogsOwnerName, reposhortname)
 				return
 			}
 
-			gogsRepos[i] = gogsRepo
-		}()
+			gogsRepo, err := gogs.MigrateRepo(opts)
+			if err != nil {
+				log.Printf("failed to migrate repo %s: %s", reponame, err)
+				return
+			}
+
+			gogsRepos[v] = gogsRepo
+		}(*repo.FullName, *repo.Name, i)
 	}
+
+	for i := 0; i < cap(sem); i++ {
+		sem <- true
+	}
+
 	wg.Wait()
 	if bar != nil {
 		bar.Update()
